@@ -1,0 +1,19 @@
+{
+  "name": "uk-customer-intelligence-frontend",
+  "version": "1.0.0",
+  "description": "UK Customer Intelligence Platform Frontend",
+  "private": true,
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.20.1",
+    "axios": "^1.6.2",
+    "react-scripts": "5.0.1"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test --watchAll=false"
+  },
+  "proxy": "http://localhost:5000"
+}

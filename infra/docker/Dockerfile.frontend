@@ -1,0 +1,21 @@
+# infra/docker/Dockerfile.frontend
+
+FROM node:18-alpine
+
+WORKDIR /app
+
+# 1) Copy only package.json (no lockfile needed)
+COPY frontend/package.json ./
+
+# 2) Install production deps
+RUN npm install --omit=dev
+
+# 3) Copy the rest of your source & build
+COPY frontend/ ./
+RUN npm run build
+
+# 4) Serve the production build
+RUN npm install -g serve
+
+EXPOSE 3000
+CMD ["serve", "-s", "build", "-l", "3000"]

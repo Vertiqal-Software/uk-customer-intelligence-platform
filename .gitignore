@@ -1,0 +1,26 @@
+# Environment files
+.env
+.env.*.local
+
+# Dependency directories
+/node_modules/
+/frontend/node_modules/
+/mobile/node_modules/
+
+# Logs
+*.log
+
+# Build outputs
+/dist/
+/build/
+
+# Python cache
+__pycache__/
+/*.py[cod]
+
+# Database dumps (if any)
+database/*.sql
+
+# IDE settings
+.vscode/
+.idea/
