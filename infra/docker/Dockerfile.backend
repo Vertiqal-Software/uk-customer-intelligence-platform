@@ -1,22 +1,24 @@
+# infra/docker/Dockerfile.backend
 FROM python:3.11-slim
-WORKDIR /app
 
-# System deps
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
+
+# curl for healthchecks; build deps for psycopg2 if needed
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential libpq-dev curl \
+    curl build-essential gcc libpq-dev \
  && rm -rf /var/lib/apt/lists/*
 
-# Python deps
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+WORKDIR /app
 
-# App code
-COPY backend/ ./backend/
-COPY scripts/ ./scripts/
+# install deps (includes flower>=2.0)
+COPY requirements.txt /app/requirements.txt
+RUN python -m pip install --no-cache-dir -r /app/requirements.txt
 
-ENV PYTHONPATH=/app
+# app code
+COPY backend /app/backend
+COPY wsgi.py /app/wsgi.py
 
 EXPOSE 5000
-
-# Use factory mode so gunicorn calls create_app()
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120", "--factory", "backend.app:create_app"]
+# no CMD here; compose sets per-service command

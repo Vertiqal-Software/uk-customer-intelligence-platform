@@ -1,18 +1,10 @@
-import os
-from celery import Celery
+# backend/__init__.py
+"""
+Backend package init.
 
-# 1) Instantiate the Celery app
-celery = Celery(
-    "uk_customer_intelligence",
-    broker=os.getenv("REDIS_URL", "redis://redis:6379/0"),
-    backend=os.getenv("REDIS_URL", "redis://redis:6379/0"),
-)
+We expose a single Celery instance as `backend.celery` to keep CLI compatibility:
+  celery -A backend worker|flower ...
 
-# 2) (Optional) configure any Celery settings here
-celery.conf.update(
-    task_track_started=True,
-    result_expires=3600,
-)
-
-# 3) Auto-discover tasks in this package
-celery.autodiscover_tasks(['backend.tasks.data_ingestion'])
+The canonical definition lives in backend.celery_app.
+"""
+from .celery_app import celery  # re-export for backward compatibility

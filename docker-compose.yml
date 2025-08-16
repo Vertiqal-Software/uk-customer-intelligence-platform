@@ -1,8 +1,7 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:15
+    container_name: ucip-db
     environment:
       POSTGRES_DB: uk_customer_intelligence
       POSTGRES_USER: devuser
@@ -11,32 +10,35 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql
-      - ./database/uk_specific_data.sql:/docker-entrypoint-initdb.d/02-uk-data.sql
-      - ./database/migrations:/docker-entrypoint-initdb.d/03-migrations:ro
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U devuser -d uk_customer_intelligence"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
+    container_name: ucip-redis
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
 
   backend:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.backend
+    container_name: ucip-backend
+    command: gunicorn --bind 0.0.0.0:5000 wsgi:app
     ports:
       - "5000:5000"
     depends_on:
@@ -44,46 +46,98 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    env_file: .env
+    environment:
+      DATABASE_URL: "postgresql+psycopg://devuser:devpass@db:5432/uk_customer_intelligence"
+      REDIS_URL: "redis://redis:6379/0"
+      FLASK_ENV: "development"
+      SECRET_KEY: "uk-customer-intelligence-secret-key-change-in-production"
+      JWT_SECRET_KEY: "jwt-secret-key-change-in-production"
+      COMPANIES_HOUSE_API_KEY: "cac2887b-57bd-40f6-a7fe-b03b28fd17df"
+      PYTHONPATH: "/app"
+      RATE_LIMIT_STORAGE_URL: "redis://redis:6379/1"
+      CORS_ORIGINS: "http://localhost:3000,http://localhost:3001"
     volumes:
       - ./backend:/app/backend
       - ./data:/app/data
       - ./logs:/app/logs
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      test: ["CMD", "curl", "-fsS", "http://localhost:5000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    restart: unless-stopped
 
   worker:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.backend
-    command: python -m celery -A backend.tasks worker --loglevel=info --concurrency=4
+    container_name: ucip-worker
+    command: python -m celery -A backend.celery_app worker --loglevel=info --concurrency=4 -E
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
-    env_file: .env
+    environment:
+      DATABASE_URL: "postgresql+psycopg://devuser:devpass@db:5432/uk_customer_intelligence"
+      REDIS_URL: "redis://redis:6379/0"
+      SECRET_KEY: "uk-customer-intelligence-secret-key-change-in-production"
+      COMPANIES_HOUSE_API_KEY: "cac2887b-57bd-40f6-a7fe-b03b28fd17df"
+      CELERY_BROKER_URL: "redis://redis:6379/0"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/0"
+      PYTHONPATH: "/app"
     volumes:
       - ./backend:/app/backend
       - ./data:/app/data
       - ./logs:/app/logs
+    restart: unless-stopped
 
   frontend:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.frontend
+    container_name: ucip-frontend
     ports:
       - "3000:3000"
     depends_on:
-      - backend
-    env_file: .env
+      backend:
+        condition: service_started
+    environment:
+      REACT_APP_API_URL: "http://localhost:5000"
+      REACT_APP_ENVIRONMENT: "development"
     volumes:
-      - ./frontend:/app
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/package.json:/app/package.json
       - /app/node_modules
+    restart: unless-stopped
+
+  flower:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.backend
+    container_name: ucip-flower
+    command: python -m celery -A backend.celery_app flower --port=5555
+    ports:
+      - "5555:5555"
+    depends_on:
+      redis:
+        condition: service_healthy
+      worker:
+        condition: service_started
+    environment:
+      REDIS_URL: "redis://redis:6379/0"
+      CELERY_BROKER_URL: "redis://redis:6379/0"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/0"
+      FLOWER_BASIC_AUTH: "admin:changeme"
+      PYTHONPATH: "/app"
+    restart: unless-stopped
 
 volumes:
   postgres_data:
   redis_data:
+
+networks:
+  default:
+    name: uk_customer_intelligence_network

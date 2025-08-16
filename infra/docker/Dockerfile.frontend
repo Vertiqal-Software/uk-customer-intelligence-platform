@@ -1,21 +1,22 @@
-# infra/docker/Dockerfile.frontend
-
 FROM node:18-alpine
 
 WORKDIR /app
 
-# 1) Copy only package.json (no lockfile needed)
+# Copy package files
 COPY frontend/package.json ./
 
-# 2) Install production deps
-RUN npm install --omit=dev
+# Install ALL dependencies (including dev dependencies for development)
+RUN npm install
 
-# 3) Copy the rest of your source & build
+# Copy the rest of the frontend code
 COPY frontend/ ./
-RUN npm run build
-
-# 4) Serve the production build
-RUN npm install -g serve
 
 EXPOSE 3000
-CMD ["serve", "-s", "build", "-l", "3000"]
+
+# Set environment variables for React
+ENV NODE_ENV=development
+ENV CHOKIDAR_USEPOLLING=true
+ENV WATCHPACK_POLLING=true
+
+# Run React development server
+CMD ["npm", "start"]
